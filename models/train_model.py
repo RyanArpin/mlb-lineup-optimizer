@@ -320,6 +320,9 @@ def predict_lineup_scores(
         "hybrid_score":  hybrid_scores,
     }).sort_values("hybrid_score", ascending=False).reset_index(drop=True)
 
+    # Deduplicate — keep highest scoring row per batter
+    results = results.drop_duplicates(subset='batter_id', keep='first')
+    
     return results
 
 
