@@ -113,6 +113,7 @@ def load_batters():
     """)
     with engine.connect() as conn:
         df = pd.read_sql(query, conn)
+    df = df.drop_duplicates('full_name')
     return df
 
 
@@ -324,7 +325,7 @@ def main():
     pitcher_row = pitchers[pitchers['full_name'] == pitcher_name].iloc[0]
     pitcher_id  = int(pitcher_row['player_id'])
 
-    roster_df   = batters[batters['full_name'].isin(selected_players)]
+    roster_df   = batters[batters['full_name'].isin(selected_players)].drop_duplicates('player_id')
     batter_ids  = roster_df['player_id'].tolist()
 
     # Progress display
