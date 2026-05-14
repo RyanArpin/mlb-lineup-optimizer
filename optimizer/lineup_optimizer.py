@@ -525,6 +525,8 @@ def find_optimal_lineup(batter_ids: list,
 
     # Filter to batters that have feature data
     scores = scores.dropna(subset=['hybrid_score'])
+    scores = scores.sort_values('hybrid_score', ascending=False)
+    scores = scores.drop_duplicates(subset=['batter_id'], keep='first').reset_index(drop=True)
 
     if len(scores) < n_select:
         raise ValueError(
@@ -533,8 +535,11 @@ def find_optimal_lineup(batter_ids: list,
         )
 
     # Select top n_select by hybrid score
-    top_batters = scores.sort_values('hybrid_score', ascending=False).head(n_select)
+    top_batters = scores.head(n_select)
     selected_ids = top_batters['batter_id'].tolist()
+
+    if len(selected_ids) != len(set(selected_ids)):
+        raise ValueError("Duplicate batter IDs were selected for the lineup.")
 
     if verbose:
         print(f"Selected top {n_select} batters:")
@@ -740,6 +745,9 @@ def find_optimal_lineup(batter_ids: list,
         'hybrid_score':  [id_to_score[b] for b in best_order],
         'expected_runs': best_runs
     })
+
+    if results['batter_id'].duplicated().any():
+        raise ValueError("Optimized lineup contains duplicate batter IDs.")
 
     return results
 

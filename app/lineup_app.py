@@ -113,7 +113,11 @@ def load_batters():
     """)
     with engine.connect() as conn:
         df = pd.read_sql(query, conn)
-    df = df.drop_duplicates('full_name')
+    df = df.drop_duplicates(subset='player_id').reset_index(drop=True)
+    df['player_label'] = df.apply(
+        lambda row: f"{row['full_name']} ({int(row['player_id'])})",
+        axis=1
+    )
     return df
 
 
@@ -133,6 +137,11 @@ def load_pitchers():
     """)
     with engine.connect() as conn:
         df = pd.read_sql(query, conn)
+    df = df.drop_duplicates(subset='player_id').reset_index(drop=True)
+    df['player_label'] = df.apply(
+        lambda row: f"{row['full_name']} ({int(row['player_id'])})",
+        axis=1
+    )
     return df
 
 
@@ -227,8 +236,10 @@ def main():
         st.error("No player data found. Make sure the database is populated.")
         return
 
-    batter_names  = batters['full_name'].tolist()
-    pitcher_names = pitchers['full_name'].tolist()
+    batter_ids    = batters['player_id'].tolist()
+    pitcher_ids   = pitchers['player_id'].tolist()
+    batter_labels  = dict(zip(batters['player_id'], batters['player_label']))
+    pitcher_labels = dict(zip(pitchers['player_id'], pitchers['player_label']))
 
     # ── Sidebar ───────────────────────────────────────────────
     with st.sidebar:
@@ -239,8 +250,9 @@ def main():
         st.subheader("Opposing Pitcher")
         pitcher_name = st.selectbox(
             "Select pitcher",
-            options=pitcher_names,
+            options=pitcher_ids,
             index=0,
+            format_func=lambda pid: pitcher_labels[pid],
             help="Pitchers sorted by toughness (lowest xwOBA allowed first)"
         )
 
@@ -252,8 +264,9 @@ def main():
 
         selected_players = st.multiselect(
             "Select 9-14 players",
-            options=batter_names,
+            options=batter_ids,
             default=None,
+            format_func=lambda pid: batter_labels[pid],
             help="The optimizer will select the best 9 from your roster"
         )
 
@@ -322,10 +335,10 @@ def main():
 
     # ── Run optimization ──────────────────────────────────────
     # Get IDs for selected players and pitcher
-    pitcher_row = pitchers[pitchers['full_name'] == pitcher_name].iloc[0]
+    pitcher_row = pitchers[pitchers['player_id'] == pitcher_name].iloc[0]
     pitcher_id  = int(pitcher_row['player_id'])
 
-    roster_df   = batters[batters['full_name'].isin(selected_players)].drop_duplicates('player_id')
+    roster_df   = batters[batters['player_id'].isin(selected_players)].drop_duplicates('player_id')
     batter_ids  = roster_df['player_id'].tolist()
 
     # Progress display
@@ -364,7 +377,7 @@ def main():
         return
 
     # ── Display results ───────────────────────────────────────
-    st.success(f"✅ Optimal lineup found vs {pitcher_name}")
+    st.success(f"✅ Optimal lineup found vs {pitcher_row['full_name']}")
     st.markdown("---")
 
     # Top metrics
@@ -387,7 +400,7 @@ def main():
     with col3:
         st.metric(
             label="Opposing Pitcher",
-            value=pitcher_name.split(',')[0],
+            value=pitcher_row['full_name'].split(',')[0],
             help=f"Batters faced: {int(pitcher_row['batters_faced']):,}"
         )
 
@@ -440,7 +453,7 @@ def main():
 
     # Full width chart
     st.subheader("📈 Lineup Hybrid Scores by Batting Slot")
-    fig2 = plot_lineup_scores(result, pitcher_name)
+    fig2 = plot_lineup_scores(result, pitcher_row['full_name'])
     st.pyplot(fig2)
     plt.close()
 
