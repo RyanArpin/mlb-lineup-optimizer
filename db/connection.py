@@ -2,11 +2,8 @@
 """
 Database connection utilities for the MLB Lineup Optimizer.
 
-Provides two connection types:
-  - get_connection(): raw psycopg2 connection, for executing SQL directly
-  - get_engine():     SQLAlchemy engine, for pandas .read_sql() / .to_sql()
-
-Both read credentials from the .env file via python-dotenv.
+When running on Streamlit Cloud: reads credentials from st.secrets
+When running locally: reads credentials from .env file
 """
 
 import os
@@ -14,66 +11,70 @@ import psycopg2
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
 
-# Load variables from .env into the environment
-# This must be called before any os.getenv() calls
 load_dotenv()
+
+
+def _get_db_params():
+    """
+    Returns database connection parameters.
+    Uses Streamlit secrets when deployed, .env when local.
+    """
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and 'database' in st.secrets:
+            db = st.secrets["database"]
+            return {
+                "host":     db["host"],
+                "port":     int(db["port"]),
+                "dbname":   db["name"],
+                "user":     db["user"],
+                "password": db["password"],
+            }
+    except Exception:
+        pass
+
+    # Fall back to .env
+    return {
+        "host":     os.getenv("DB_HOST"),
+        "port":     int(os.getenv("DB_PORT", 5432)),
+        "dbname":   os.getenv("DB_NAME"),
+        "user":     os.getenv("DB_USER"),
+        "password": os.getenv("DB_PASSWORD"),
+    }
 
 
 def get_connection():
     """
     Returns a raw psycopg2 connection.
-
-    Use this for:
-      - CREATE TABLE / DROP TABLE (DDL statements)
-      - INSERT / UPDATE / DELETE (DML statements)
-      - Any query where you want manual transaction control
-
-    Usage:
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT 1")
-        conn.commit()   # required after INSERT/UPDATE/DELETE
-        conn.close()    # always close when done
-
-    Or as a context manager (auto-closes on exit):
-        with get_connection() as conn:
-            ...
+    Use for direct SQL execution and DDL statements.
     """
-    conn = psycopg2.connect(
-        host=os.getenv("DB_HOST"),
-        port=os.getenv("DB_PORT"),
-        dbname=os.getenv("DB_NAME"),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD")
-    )
-    return conn
+    return psycopg2.connect(**_get_db_params())
 
 
 def get_engine():
     """
     Returns a SQLAlchemy engine.
-
-    Use this for:
-      - pd.read_sql("SELECT ...", engine)   → query results as a DataFrame
-      - df.to_sql("table_name", engine)     → write a DataFrame to a table
-
-    SQLAlchemy handles connection pooling automatically,
-    so you don't need to manually open/close connections here.
+    Use with pandas .read_sql() and .to_sql().
     """
-    db_url = (
-        f"postgresql+psycopg2://"
-        f"{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}"
-        f"@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}"
-        f"/{os.getenv('DB_NAME')}"
+    p = _get_db_params()
+    url = (
+        f"postgresql+psycopg2://{p['user']}:{p['password']}"
+        f"@{p['host']}:{p['port']}/{p['dbname']}"
     )
-    engine = create_engine(db_url)
-    return engine
+    return create_engine(url)
+
+
+def get_conn_for_pandas():
+    """
+    Returns a SQLAlchemy connection for pandas compatibility.
+    """
+    engine = get_engine()
+    return engine.connect()
 
 
 def test_connection():
     """
-    Sanity check — confirms PostgreSQL is running and credentials are correct.
-    Run this after any environment change.
+    Sanity check — confirms database connection works.
     """
     try:
         conn = get_connection()
@@ -86,24 +87,7 @@ def test_connection():
         conn.close()
     except psycopg2.OperationalError as e:
         print(f"❌ Connection failed:\n   {e}")
-        print("\n── Troubleshooting checklist ──────────────────────────")
-        print("  1. Is PostgreSQL running?")
-        print("       sudo service postgresql status")
-        print("       sudo service postgresql start")
-        print("  2. Do your .env credentials match what you set in psql?")
-        print("  3. Does the database exist?")
-        print("       sudo -u postgres psql -l")
-        print("  4. Is your virtual environment activated?")
-        print("       source venv/bin/activate")
 
-def get_conn_for_pandas():
-    """
-    Returns a psycopg2 connection wrapped for pandas compatibility.
-    Use this instead of get_connection() when calling pd.read_sql().
-    """
-    from sqlalchemy import text
-    engine = get_engine()
-    return engine.connect()
 
 if __name__ == "__main__":
     test_connection()
