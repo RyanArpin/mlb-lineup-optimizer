@@ -6,7 +6,7 @@ An MLB batting order optimizer that uses machine learning and Monte Carlo simula
 
 ## How It Works
 
-> ⏱️ **Runtime: ~90 seconds** — the optimizer runs 8,000 Monte Carlo game simulations per lineup evaluation.
+> ⏱️ **Runtime: ~120 seconds** — the optimizer runs 8,000 Monte Carlo game simulations per lineup evaluation.
 
 **Stage 1 — Player Selection (Gradient Boosting ML)**
 Scores each batter's expected run contribution against the opposing pitcher using 16 Statcast features including handedness-specific xwOBA, exit velocity, HR rate, and whiff rate. Trained on 435,000 batter-pitcher matchups from 2024-2026.
